@@ -7,10 +7,10 @@ public class CustomPlayerController : UdonSharpBehaviour
 {
     VRCPlayerApi player;
     bool holdingSlide = false;
+    bool waitingToJump = false;
 
-    Vector3 _oldVelocity;
-
-    float slideVelocity = 10;
+    public float jumpVelocity = 10;
+    public float slideVelocity = 10;
 
     bool inSlideState = false;
 
@@ -33,18 +33,18 @@ public class CustomPlayerController : UdonSharpBehaviour
     private void HandleInput()
     {
         holdingSlide = Input.GetKey(KeyCode.LeftControl);
+        waitingToJump = Input.GetKey(KeyCode.Space);
     }
 
     protected void EnterSlide()
     {
-        _oldVelocity = player.GetVelocity();
         Vector3 dir = player.GetVelocity().normalized;
         player.SetVelocity(dir * slideVelocity);
     }
 
     protected void ExitSlide()
     {
-        player.SetVelocity(_oldVelocity);
+
     }
 
     public void ExecuteSlide()
@@ -61,6 +61,12 @@ public class CustomPlayerController : UdonSharpBehaviour
 
         inSlideState = false;
         ExitSlide();
+
+        if(waitingToJump)
+        {
+            player.SetVelocity(player.GetVelocity() + new Vector3(0,jumpVelocity,0));
+            waitingToJump = false;
+        }
     }
 
 
