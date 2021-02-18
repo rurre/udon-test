@@ -42,6 +42,17 @@ public class CustomPlayerController : UdonSharpBehaviour
     bool _playerGrounded;
     float _timeNotGrounded;
 
+    // Prefabs
+    public GameObject sparksPrefab;
+    public GameObject dashPrefab;
+
+    // Particles
+    ParticleSystem localSparkParticles;
+    ParticleSystem localDashParticles;
+
+    Transform localSparkTransform;
+    Transform localDashTransform;
+
     #region States
 
     /// <summary>
@@ -82,7 +93,10 @@ public class CustomPlayerController : UdonSharpBehaviour
         player = Networking.LocalPlayer;
         player.SetJumpImpulse(0);
         dashJuice = dashJuiceMax;
+
+        SetupParticles();
     }
+
 
     #region Input
 
@@ -101,6 +115,18 @@ public class CustomPlayerController : UdonSharpBehaviour
             _pressedJump = Input.GetKeyDown(jumpKey);
         if(!_pressedDash)
             _pressedDash = Input.GetKeyDown(dashKey);
+    }
+
+    Vector3 GetMovementInputDirection()
+    {
+        float x = Input.GetAxis("Horizontal");
+        float z = Input.GetAxis("Vertical");
+
+        // If not holding anything return forward
+        if(x == 0 && z == 0)
+            z = 1;
+
+        return (player.GetRotation() * new Vector3(x, 0f, z)).normalized;
     }
 
     void ResetFrameVariables()
@@ -313,17 +339,21 @@ public class CustomPlayerController : UdonSharpBehaviour
 
     void EnterSlide()
     {
-        slideDirection = player.GetRotation() * Vector3.forward;
+        slideDirection = GetMovementInputDirection();
+        PlayParticles(localSparkParticles, localSparkTransform, slideDirection);
     }
 
     void ExecuteSlide()
     {
         SetHorizontalVelocity(player, slideDirection * slideVelocity);
+        UpdateParticlesPosition(localSparkTransform, HumanBodyBones.Head);
     }
+
 
     void ExitSlide(int nextState)
     {
         this.nextState = nextState;
+        StopParticles(localSparkParticles);
     }
 
     #endregion
@@ -358,7 +388,7 @@ public class CustomPlayerController : UdonSharpBehaviour
 
     void EnterJump()
     {
-        SetVeritcalVelocity(player, jumpImpulseOverride * Vector3.up);
+        SetVerticalVelocity(player, jumpImpulseOverride * Vector3.up);
     }
 
     void ExitJump(int nextState)
@@ -434,6 +464,8 @@ public class CustomPlayerController : UdonSharpBehaviour
             return;
         }
 
+        UpdateParticlesPosition(localDashTransform, HumanBodyBones.Head);
+
         player.SetVelocity(dashDir * dashVelocity);
         dashTimeLeft -= Time.fixedDeltaTime;
     }
@@ -441,21 +473,15 @@ public class CustomPlayerController : UdonSharpBehaviour
     void EnterDash()
     {
         dashJuice -= 1;
-        var vel = player.GetVelocity();
-        if(vel.x == 0 && vel.z == 0)
-        {
-            dashDir = player.GetRotation() * Vector3.forward;
-            return;
-        }
-
-        vel.y = 0;
-        dashDir = vel.normalized;
+        dashDir = GetMovementInputDirection();
+        PlayParticles(localDashParticles, localDashTransform, dashDir);
     }
 
     void ExitDash(int nextState)
     {
         this.nextState = nextState;
         player.SetVelocity(Vector3.zero);
+        StopParticles(localDashParticles);
     }
 
     void RegenerateDash(float deltaTime)
@@ -469,6 +495,44 @@ public class CustomPlayerController : UdonSharpBehaviour
             dashJuice += deltaTime * dashRegenRate;
         else
             dashJuice = dashJuiceMax;
+    }
+
+    #endregion
+
+    #region Effects
+
+    void SetupParticles()
+    {
+        if(sparksPrefab)
+        {
+            var sparks = VRCInstantiate(sparksPrefab);
+            localSparkParticles = sparks.GetComponent<ParticleSystem>();
+            localSparkTransform = sparks.GetComponent<Transform>();
+        }
+
+        if(dashPrefab)
+        {
+            var dash = VRCInstantiate(dashPrefab);
+            localDashParticles = dash.GetComponent<ParticleSystem>();
+            localDashTransform = dash.GetComponent<Transform>();
+        }
+    }
+
+
+    void PlayParticles(ParticleSystem sys, Transform trans, Vector3 direction)
+    {
+        sys.Play();
+        trans.forward = direction;
+    }
+
+    void UpdateParticlesPosition(Transform trans, HumanBodyBones referenceBonePosition)
+    {
+        trans.position = player.GetBonePosition(referenceBonePosition);
+    }
+
+    void StopParticles(ParticleSystem sys)
+    {
+        sys.Stop();
     }
 
     #endregion
@@ -487,7 +551,7 @@ public class CustomPlayerController : UdonSharpBehaviour
         player.SetVelocity(velocity);
     }
 
-    void SetVeritcalVelocity(VRCPlayerApi player, Vector3 velocity)
+    void SetVerticalVelocity(VRCPlayerApi player, Vector3 velocity)
     {
         var current = player.GetVelocity();
         current.y = velocity.y;
